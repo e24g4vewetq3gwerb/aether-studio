@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aether — generative music studio</title>
+<meta name="description" content="Compose and play original music in the browser. Multi-track generator with piano roll, mixer, WAV and MIDI export." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%2312110e' width='32' height='32' rx='6'/%3E%3Cpath d='M8 22V10h3.2c2.6 0 4.2 1.4 4.2 3.5 0 1.4-.7 2.5-1.9 3.1L16.8 22h-2.4l-2.8-5H10.2V22H8zm2.2-6.8h1.1c1.3 0 2.1-.6 2.1-1.6s-.8-1.6-2.1-1.6H10.2v3.2zM18 22V10h6.4v1.8h-4.2v3.1h3.7v1.8h-3.7V20.2H24.6V22H18z' fill='%23e8a15a'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg: #12110e;
+    --bg2: #18160f;
+    --panel: #1d1b16;
+    --panel2: #242119;
+    --line: #343026;
+    --ink: #f3eee4;
+    --muted: #a39684;
+    --faint: #6f675c;
+    --amber: #e8a15a;
+    --amber2: #f0c48a;
+    --teal: #79c7bc;
+    --rose: #e08a78;
+    --violet: #b7a0e0;
+    --bass: #e0b15a;
+    --shadow: 0 18px 50px rgba(0,0,0,.35);
+    --sans: "Avenir Next", "Segoe UI", Helvetica, sans-serif;
+    --serif: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(900px 480px at 10% -10%, rgba(232,161,90,.14), transparent 55%),
+      radial-gradient(700px 420px at 100% 0%, rgba(121,199,188,.08), transparent 50%),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    letter-spacing: .01em;
+  }
+  body::before {
+    content: "";
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    opacity: .18;
+    background-image: radial-gradient(rgba(255,255,255,.16) 0.6px, transparent 0.6px);
+    background-size: 3px 3px;
+    mix-blend-mode: overlay;
+  }
+  .app { max-width: 1180px; margin: 0 auto; padding: 22px 20px 110px; position: relative; }
+  header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; }
+  .mark { display: flex; gap: 12px; align-items: center; }
+  .glyph {
+    width: 42px; height: 42px; border-radius: 12px;
+    background: linear-gradient(160deg, #2a241c, #16140f);
+    border: 1px solid var(--line);
+    display: grid; place-items: center;
+    color: var(--amber); font-family: var(--serif); font-size: 22px;
+    box-shadow: var(--shadow);
+  }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 28px; margin: 0; letter-spacing: -.02em; }
+  .sub { color: var(--muted); margin: 2px 0 0; font-size: 13px; }
+  .head-actions { display: flex; gap: 8px; align-items: center; }
+  button, select, input[type="text"] { font: inherit; color: inherit; }
+  button {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--ink);
+    border-radius: 999px; padding: 8px 14px; cursor: pointer;
+  }
+  button:hover { border-color: #5a5346; }
+  button.primary { background: var(--amber); color: #1b140c; border-color: transparent; font-weight: 650; }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: .45; cursor: default; }
+  .layout { display: grid; grid-template-columns: 300px 1fr; gap: 16px; }
+  .panel {
+    background: rgba(29,27,22,.86);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 14px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(8px);
+  }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--faint); margin: 12px 0 8px; }
+  .genres { display: flex; flex-wrap: wrap; gap: 6px; }
+  .genres button { padding: 6px 10px; font-size: 13px; }
+  .genres button.on { background: #2c261c; border-color: var(--amber); color: var(--amber2); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  select, input[type="text"] {
+    width: 100%; background: #14130f; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px;
+  }
+  .slider { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin: 6px 0; font-size: 13px; color: var(--muted); }
+  input[type="range"] { width: 100%; accent-color: var(--amber); }
+  .val { color: var(--ink); min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+  .stage-top { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+  .title { font-family: var(--serif); font-size: 32px; margin: 0; letter-spacing: -.03em; }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .seedbox { display: flex; gap: 6px; }
+  .seedbox input { width: 128px; }
+  .romans { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+  .romans span {
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 9px; font-size: 12px; color: var(--muted);
+  }
+  .romans span.now { border-color: var(--amber); color: var(--amber2); background: #2a2318; }
+  canvas { width: 100%; border-radius: 12px; background: #100f0c; display: block; border: 1px solid #2a261e; }
+  #roll { height: 280px; }
+  #scope { height: 64px; margin-top: 8px; }
+  .mix { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
+  .mix label { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .12em; display: grid; gap: 6px; }
+  .transport {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    background: rgba(16,15,12,.92); border-top: 1px solid var(--line);
+    backdrop-filter: blur(10px); z-index: 5;
+  }
+  .transport-in {
+    max-width: 1180px; margin: 0 auto; padding: 12px 20px;
+    display: flex; gap: 10px; align-items: center; justify-content: space-between;
+  }
+  .transport-in .left, .transport-in .right { display: flex; gap: 8px; align-items: center; }
+  .now { font-size: 13px; color: var(--muted); min-width: 180px; }
+  .now b { color: var(--ink); font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); display: inline-block; margin-right: 6px; }
+  .dot.on { background: var(--teal); box-shadow: 0 0 8px var(--teal); }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; }
+    .title { font-size: 26px; }
+    .mix { grid-template-columns: repeat(3, 1fr); }
+    header { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="mark">
+      <div class="glyph">Æ</div>
+      <div>
+        <h1>Aether</h1>
+        <p class="sub">Generative music studio. Composed in your browser — nothing is uploaded.</p>
+      </div>
+    </div>
+    <div class="head-actions">
+      <button id="share" class="ghost">Copy link</button>
+      <button id="surprise">Surprise me</button>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="panel">
+      <div class="label">Genre</div>
+      <div class="genres" id="genres"></div>
+      <div class="label">Key & scale</div>
+      <div class="row">
+        <select id="key"></select>
+        <select id="scale"></select>
+      </div>
+      <div class="label">Feel</div>
+      <div class="slider"><span>Tempo</span><span class="val" id="bpmVal">96</span></div>
+      <input id="bpm" type="range" min="60" max="140" value="96" />
+      <div class="slider"><span>Bars</span><span class="val" id="barsVal">8</span></div>
+      <input id="bars" type="range" min="4" max="16" step="4" value="8" />
+      <div class="slider"><span>Density</span><span class="val" id="densityVal">60%</span></div>
+      <input id="density" type="range" min="20" max="90" value="60" />
+      <div class="slider"><span>Swing</span><span class="val" id="swingVal">0%</span></div>
+      <input id="swing" type="range" min="0" max="60" value="0" />
+      <div class="label">Seed</div>
+      <div class="seedbox">
+        <input id="seed" type="text" spellcheck="false" />
+        <button id="lock" class="ghost" title="Lock seed">Lock</button>
+      </div>
+      <p class="sub" style="margin-top:10px">Same seed and settings always rebuild the same piece.</p>
+    </aside>
+    <main class="panel">
+      <div class="stage-top">
+        <div>
+          <h2 class="title" id="pieceTitle">Untitled</h2>
+          <div class="meta" id="pieceMeta">—</div>
+        </div>
+        <div class="now" id="chordNow">Ready</div>
+      </div>
+      <div class="romans" id="romans"></div>
+      <canvas id="roll" width="900" height="280"></canvas>
+      <canvas id="scope" width="900" height="64"></canvas>
+      <div class="mix" id="mix"></div>
+    </main>
+  </div>
+</div>
+<div class="transport">
+  <div class="transport-in">
+    <div class="left">
+      <button id="play" class="primary">Play</button>
+      <button id="stop">Stop</button>
+      <button id="regen">New piece</button>
+      <button id="loop" class="ghost">Loop on</button>
+    </div>
+    <div class="right">
+      <span class="dot" id="dot"></span>
+      <span class="now" id="status">Idle</span>
+      <button id="wav">Download WAV</button>
+      <button id="midi">Download MIDI</button>
+    </div>
+  </div>
+</div>
+<script>
+const NOTES = ["C","C#","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+const SCALES = {
+  major: [0,2,4,5,7,9,11],
+  minor: [0,2,3,5,7,8,10],
+  dorian: [0,2,3,5,7,9,10],
+  mixolydian: [0,2,4,5,7,9,10],
+  harmonic: [0,2,3,5,7,8,11],
+  pentatonic: [0,2,4,7,9]
+};
+const GENRES = {
+  ambient: { label: "Ambient", scale: "dorian", bpm: 72, swing: 8, density: 38, drums: "sparse", sevenths: true, prog: [[0,5,3,4],[0,3,6,4],[0,6,3,5]] },
+  lofi: { label: "Lo-fi", scale: "dorian", bpm: 82, swing: 42, density: 52, drums: "lofi", sevenths: true, prog: [[1,4,0,5],[0,3,4,4],[5,3,0,4]] },
+  house: { label: "House", scale: "minor", bpm: 122, swing: 0, density: 48, drums: "house", sevenths: false, prog: [[0,5,3,4],[0,6,3,4],[0,3,5,4]] },
+  jazz: { label: "Jazz", scale: "dorian", bpm: 108, swing: 52, density: 62, drums: "jazz", sevenths: true, prog: [[1,4,0,5],[2,5,1,4],[0,3,1,4]] },
+  cinematic: { label: "Cinematic", scale: "harmonic", bpm: 86, swing: 0, density: 44, drums: "cinematic", sevenths: false, prog: [[0,5,3,4],[5,3,0,4],[0,4,5,3]] },
+  pop: { label: "Pop", scale: "major", bpm: 104, swing: 8, density: 64, drums: "pop", sevenths: false, prog: [[0,4,5,3],[0,5,3,4],[0,3,4,4]] },
+  afro: { label: "Afrobeat", scale: "pentatonic", bpm: 112, swing: 18, density: 58, drums: "afro", sevenths: false, prog: [[0,3,4,0],[0,4,3,4],[0,0,3,4]] },
+  classical: { label: "Classical", scale: "major", bpm: 78, swing: 0, density: 55, drums: "none", sevenths: false, prog: [[0,4,5,0],[0,3,4,4],[0,5,1,4]] }
+};
+const DRUMS = {
+  pop: { kick:[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hat:[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1] },
+  house:{ kick:[1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0], snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0], hat:[0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0] },
+  lofi:{ kick:[1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0], snare:[0,0,0,0,1,0,0,0,0,0,0,1,1,0,0,0], hat:[1,0,1,1,0,1,1,0,1,0,1,0,1,1,0,1] },
+  jazz:{ kick:[1,0,0,0,0,0,1,0,0,0,1,0,0,1,0,0], snare:[0,0,0,0,1,0,0,0,0,0,0,1,1,0,0,0], hat:[1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1] },
+  sparse:{ kick:[1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0], snare:[0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0], hat:[1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0] },
+  cinematic:{ kick:[1,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0], snare:[0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0], hat:[1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0] },
+  afro:{ kick:[1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0], snare:[0,0,0,0,1,0,0,1,0,0,1,0,0,0,1,0], hat:[1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1] },
+  none:{ kick:[], snare:[], hat:[] }
+};
+const ADJ = ["Amber","Quiet","Low","Silver","Velvet","Night","Warm","Glass","Slow","Copper","Distant","Soft","Paper","Golden","Still"];
+const NOUN = ["Lantern","Current","Harbor","Window","Ember","Garden","Signal","Tide","Room","Horizon","Tape","Orbit","Attic","River","Field"];
+const TRACKS = [
+  { id:"drums", label:"Drums", color:"#e08a78" },
+  { id:"bass", label:"Bass", color:"#e0b15a" },
+  { id:"chords", label:"Chords", color:"#79c7bc" },
+  { id:"melody", label:"Melody", color:"#f3eee4" },
+  { id:"pad", label:"Pad", color:"#b7a0e0" }
+];
+
+const $ = (id) => document.getElementById(id);
+const state = {
+  genre: "lofi",
+  locked: false,
+  looping: true,
+  playing: false,
+  piece: null,
+  ctx: null,
+  nodes: [],
+  timers: [],
+  origin: 0,
+  loopBeats: 32,
+  analyser: null,
+  raf: 0
+};
+
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hashSeed(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function randSeed() {
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  let s = "";
+  for (let i = 0; i < 6; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return s;
+}
+function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+function midiName(n) { return NOTES[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1); }
+function scalePitch(root, scale, degree) {
+  const n = scale.length;
+  const oct = Math.floor(degree / n);
+  const i = ((degree % n) + n) % n;
+  return root + scale[i] + oct * 12;
+}
+function chordQuality(rootPc, tones) {
+  const set = new Set(tones.map(t => ((t - rootPc) % 12 + 12) % 12));
+  const min = set.has(3), maj = set.has(4), dim = set.has(6), aug = set.has(8);
+  const sev = set.has(10), maj7 = set.has(11);
+  let q = dim && min ? "dim" : aug ? "aug" : min ? "m" : "";
+  if (sev) q += q === "dim" ? "7" : "7";
+  else if (maj7) q += "maj7";
+  return q;
+}
+function roman(degree, q) {
+  const base = ["I","II","III","IV","V","VI","VII"][degree % 7] || "I";
+  const minorish = q.startsWith("m") || q.startsWith("dim");
+  const r = minorish ? base.toLowerCase() : base;
+  return r + (q.includes("7") ? "7" : "") + (q.startsWith("dim") ? "°" : "");
+}
+
+function generate(seed, opts) {
+  const rng = mulberry32(hashSeed(seed + "|" + opts.genre + "|" + opts.key + "|" + opts.scale));
+  const scale = SCALES[opts.scale];
+  const keyPc = NOTES.indexOf(opts.key);
+  const root = 48 + keyPc;
+  const g = GENRES[opts.genre];
+  const bars = opts.bars;
+  const degrees = pick(rng, g.prog);
+  const chords = [];
+  for (let i = 0; i < bars; i++) {
+    const degree = degrees[i % degrees.length] % scale.length;
+    const steps = g.sevenths && scale.length >= 7 ? [0,2,4,6] : [0,2,4];
+    const tones = steps.map(s => scalePitch(root, scale, degree + s));
+    const rootPc = tones[0] % 12;
+    const q = chordQuality(tones[0], tones);
+    const name = NOTES[rootPc] + q;
+    const voiced = voice(rng, tones);
+    chords.push({ bar: i, degree, name, roman: roman(degree, q), tones: voiced, root: (tones[0] % 12) + 36 });
+  }
+  const events = [];
+  const drum = DRUMS[g.drums] || DRUMS.none;
+  for (let bar = 0; bar < bars; bar++) {
+    for (let step = 0; step < 16; step++) {
+      const beat = bar * 4 + step / 4;
+      if (drum.kick[step]) events.push({ beat, dur: 0.2, midi: 36, vel: 0.9, track: "drums", drum: "kick" });
+      if (drum.snare[step]) events.push({ beat, dur: 0.18, midi: 38, vel: 0.75, track: "drums", drum: "snare" });
+      if (drum.hat[step]) events.push({ beat, dur: 0.08, midi: 42, vel: 0.35 + rng() * 0.25, track: "drums", drum: "hat" });
+    }
+    const ch = chords[bar];
+    const stab = opts.genre === "house" || opts.genre === "afro";
+    if (stab) {
+      [0, 2].forEach(off => events.push({ beat: bar * 4 + off, dur: 0.45, notes: ch.tones, vel: 0.42, track: "chords" }));
+    } else {
+      events.push({ beat: bar * 4, dur: opts.genre === "ambient" || opts.genre === "cinematic" ? 3.6 : 3.2, notes: ch.tones, vel: 0.34, track: "chords" });
+    }
+    events.push({ beat: bar * 4, dur: 3.8, notes: ch.tones.map(n => n - 12), vel: 0.22, track: "pad" });
+    const bassHits = opts.genre === "jazz" ? [0, 1, 2, 3] : opts.genre === "house" ? [0, 1.5, 2.5, 3.5] : opts.genre === "afro" ? [0, 1, 2.5, 3.25] : [0, 2.5];
+    bassHits.forEach((off, idx) => {
+      const fifth = scalePitch(root, scale, ch.degree + 4) % 12;
+      const note = idx % 2 === 0 ? ch.root : (opts.genre === "jazz" ? (ch.root % 12) + 36 + (idx === 2 ? 7 : 0) : (fifth + 36));
+      let midi = note;
+      while (midi < 36) midi += 12;
+      while (midi > 52) midi -= 12;
+      events.push({ beat: bar * 4 + off, dur: opts.genre === "ambient" ? 1.6 : 0.42, midi, vel: 0.7, track: "bass" });
+    });
+    writeMelody(rng, events, opts, scale, root, ch, bar);
+  }
+  const title = ADJ[hashSeed(seed) % ADJ.length] + " " + NOUN[hashSeed(seed + "n") % NOUN.length];
+  return { seed, title, chords, events, bars, bpm: opts.bpm, key: opts.key, scale: opts.scale, genre: opts.genre, swing: opts.swing };
+}
+function voice(rng, tones) {
+  let pcs = tones.map(t => ((t % 12) + 12) % 12);
+  let v = pcs.map(pc => 60 + pc);
+  const inv = Math.floor(rng() * v.length);
+  v = v.slice(inv).concat(v.slice(0, inv).map(n => n + 12));
+  return v.map(n => { while (n < 57) n += 12; while (n > 79) n -= 12; return n; });
+}
+function writeMelody(rng, events, opts, scale, root, ch, bar) {
+  const density = opts.density / 100;
+  const steps = opts.genre === "ambient" || opts.genre === "cinematic" ? [0, 2, 8, 10] : [0, 2, 4, 6, 8, 10, 12, 14];
+  let last = 67;
+  steps.forEach(step => {
+    if (rng() > density) return;
+    const strong = step % 4 === 0;
+    let midi;
+    if (strong || rng() < 0.5) {
+      midi = pick(rng, ch.tones) + (rng() < 0.3 ? 12 : 0);
+    } else {
+      const dir = rng() < 0.5 ? -1 : 1;
+      const jump = 1 + Math.floor(rng() * 2);
+      midi = last + dir * jump * (scale.length > 5 ? 2 : 2);
+      const pc = ((midi % 12) + 12) % 12;
+      if (!scale.includes(pc) && rng() < 0.8) midi += dir;
+    }
+    while (midi < 64) midi += 12;
+    while (midi > 84) midi -= 12;
+    last = midi;
+    const dur = opts.genre === "ambient" ? 1.5 : rng() < 0.25 ? 0.9 : 0.4;
+    events.push({ beat: bar * 4 + step / 4, dur, midi, vel: 0.45 + rng() * 0.35, track: "melody" });
+  });
+}
+
+function swingBeat(beat, swing) {
+  const six = beat * 4;
+  const step = Math.round(six) ;
+  const frac = six - Math.floor(six);
+  const base = Math.floor(six);
+  if (base % 2 === 1) return (base + frac + swing / 100 * 0.55) / 4;
+  return beat;
+}
+
+let noiseBuf = null;
+function noise(ctx) {
+  if (noiseBuf && noiseBuf.sampleRate === ctx.sampleRate) return noiseBuf;
+  const len = ctx.sampleRate;
+  noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  return noiseBuf;
+}
+function env(ctx, t, peak, a, d, s, dur, r) {
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.001, peak), t + Math.max(0.005, a));
+  g.gain.exponentialRampToValueAtTime(Math.max(0.001, peak * s), t + a + d);
+  const end = t + Math.max(dur, a + d);
+  g.gain.setValueAtTime(Math.max(0.001, peak * s), end);
+  g.gain.exponentialRampToValueAtTime(0.0001, end + r);
+  return { g, stop: end + r };
+}
+function tone(ctx, dest, t, freq, type, dur, amp, cutoff) {
+  const o = ctx.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  const f = ctx.createBiquadFilter();
+  f.type = "lowpass";
+  f.frequency.setValueAtTime(cutoff, t);
+  f.frequency.exponentialRampToValueAtTime(Math.max(200, cutoff * 0.45), t + dur);
+  const e = env(ctx, t, amp, 0.02, 0.12, 0.55, dur, 0.12);
+  o.connect(f); f.connect(e.g); e.g.connect(dest);
+  o.start(t); o.stop(e.stop + 0.02);
+  return o;
+}
+function playEvent(ctx, dest, t, ev, genre) {
+  const amp = (ev.vel || 0.5) * (state.mix[ev.track] ?? 0.7);
+  if (amp < 0.01) return;
+  if (ev.drum) {
+    if (ev.drum === "kick") {
+      const o = ctx.createOscillator();
+      o.type = "sine";
+      o.frequency.setValueAtTime(150, t);
+      o.frequency.exponentialRampToValueAtTime(46, t + 0.09);
+      const e = env(ctx, t, amp * 0.9, 0.005, 0.08, 0.3, 0.16, 0.06);
+      o.connect(e.g); e.g.connect(dest);
+      o.start(t); o.stop(t + 0.3);
+      state.nodes.push(o);
+    } else {
+      const src = ctx.createBufferSource();
+      src.buffer = noise(ctx);
+      const f = ctx.createBiquadFilter();
+      f.type = ev.drum === "hat" ? "highpass" : "bandpass";
+      f.frequency.value = ev.drum === "hat" ? 7000 : 1800;
+      const e = env(ctx, t, amp * (ev.drum === "hat" ? 0.28 : 0.45), 0.003, 0.04, 0.2, ev.dur, 0.05);
+      src.connect(f); f.connect(e.g); e.g.connect(dest);
+      src.start(t); src.stop(t + 0.3);
+      state.nodes.push(src);
+    }
+    return;
+  }
+  const notes = ev.notes || [ev.midi];
+  const type = ev.track === "bass" ? "sawtooth" : ev.track === "pad" ? "triangle" : genre === "jazz" || genre === "classical" ? "triangle" : "sawtooth";
+  const cutoff = ev.track === "pad" ? 900 : ev.track === "bass" ? 420 : genre === "house" ? 2400 : 1600;
+  notes.forEach((m, i) => {
+    const det = ev.track === "pad" ? (i - 1) * 4 : 0;
+    const o = tone(ctx, dest, t, 440 * Math.pow(2, (m - 69) / 12) + det, type, ev.dur, amp * (ev.track === "chords" ? 0.22 : 0.5), cutoff);
+    state.nodes.push(o);
+  });
+}
+function makeReverb(ctx) {
+  const len = Math.floor(ctx.sampleRate * 2.2);
+  const impulse = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = impulse.getChannelData(c);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.2);
+  }
+  const conv = ctx.createConvolver();
+  conv.buffer = impulse;
+  return conv;
+}
+function buildGraph(ctx) {
+  const master = ctx.createGain();
+  master.gain.value = 0.85;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -16; comp.knee.value = 18; comp.ratio.value = 3; comp.attack.value = 0.01; comp.release.value = 0.2;
+  const dry = ctx.createGain(); dry.gain.value = 0.85;
+  const wet = ctx.createGain(); wet.gain.value = 0.28;
+  const conv = makeReverb(ctx);
+  const delay = ctx.createDelay(1); delay.delayTime.value = 0.27;
+  const fb = ctx.createGain(); fb.gain.value = 0.28;
+  const dsend = ctx.createGain(); dsend.gain.value = 0.18;
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  master.connect(dry); dry.connect(comp);
+  master.connect(wet); wet.connect(conv); conv.connect(comp);
+  master.connect(dsend); dsend.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(comp);
+  comp.connect(analyser); analyser.connect(ctx.destination);
+  return { master, analyser };
+}
+
+function stopAudio() {
+  state.playing = false;
+  state.timers.forEach(clearTimeout);
+  state.timers = [];
+  state.nodes.forEach(n => { try { n.stop(); } catch (e) {} });
+  state.nodes = [];
+  if (state.ctx) { try { state.ctx.close(); } catch (e) {} state.ctx = null; }
+  $("dot").classList.remove("on");
+  $("status").textContent = "Stopped";
+  $("play").textContent = "Play";
+}
+async function play() {
+  if (!state.piece) compose(false);
+  if (state.playing) { stopAudio(); return; }
+  const ctx = new AudioContext();
+  state.ctx = ctx;
+  if (ctx.state === "suspended") await ctx.resume();
+  const graph = buildGraph(ctx);
+  state.analyser = graph.analyser;
+  state.playing = true;
+  state.origin = ctx.currentTime + 0.12;
+  $("play").textContent = "Pause";
+  $("dot").classList.add("on");
+  $("status").textContent = "Playing";
+  scheduleLoop(0, graph.master);
+  draw();
+}
+function scheduleLoop(index, dest) {
+  if (!state.playing || !state.piece) return;
+  const piece = state.piece;
+  const beatDur = 60 / piece.bpm;
+  const loopBeats = piece.bars * 4;
+  const start = state.origin + index * loopBeats * beatDur;
+  piece.events.forEach(ev => {
+    const b = swingBeat(ev.beat, piece.swing);
+    playEvent(state.ctx, dest, start + b * beatDur, ev, piece.genre);
+  });
+  if (state.looping) {
+    const wait = (start + loopBeats * beatDur - state.ctx.currentTime - 0.6) * 1000;
+    const id = setTimeout(() => scheduleLoop(index + 1, dest), Math.max(40, wait));
+    state.timers.push(id);
+  } else {
+    const wait = (start + loopBeats * beatDur - state.ctx.currentTime + 0.2) * 1000;
+    const id = setTimeout(() => { if (state.playing) stopAudio(); }, Math.max(40, wait));
+    state.timers.push(id);
+  }
+}
+
+function settings() {
+  return {
+    genre: state.genre,
+    key: $("key").value,
+    scale: $("scale").value,
+    bpm: +$("bpm").value,
+    bars: +$("bars").value,
+    density: +$("density").value,
+    swing: +$("swing").value
+  };
+}
+function compose(newSeed) {
+  if (newSeed && !state.locked) $("seed").value = randSeed();
+  const opts = settings();
+  state.piece = generate($("seed").value || "aether", opts);
+  renderPiece();
+  writeHash();
+  $("status").textContent = "Piece ready";
+}
+function renderPiece() {
+  const p = state.piece;
+  $("pieceTitle").textContent = p.title;
+  $("pieceMeta").textContent = `${GENRES[p.genre].label} · ${p.key} ${p.scale} · ${p.bpm} bpm · ${p.bars} bars · seed ${p.seed}`;
+  $("romans").innerHTML = p.chords.filter((c, i) => i < 8 || p.bars <= 8).map((c, i) => `<span data-bar="${c.bar}">${c.roman} ${c.name}</span>`).join("");
+  drawRoll(0);
+}
+function currentBar() {
+  if (!state.playing || !state.ctx || !state.piece) return -1;
+  const beatDur = 60 / state.piece.bpm;
+  const beats = (state.ctx.currentTime - state.origin) / beatDur;
+  if (beats < 0) return -1;
+  return Math.floor(beats / 4) % state.piece.bars;
+}
+function drawRoll(playBeat) {
+  const c = $("roll");
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.clientWidth || 900;
+  const h = 280;
+  c.width = w * dpr; c.height = h * dpr;
+  const g = c.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = "#100f0c";
+  g.fillRect(0, 0, w, h);
+  const p = state.piece;
+  if (!p) return;
+  const beats = p.bars * 4;
+  const left = 36, top = 12, bh = h - 28;
+  for (let i = 0; i <= beats; i++) {
+    const x = left + (i / beats) * (w - left - 8);
+    g.strokeStyle = i % 4 === 0 ? "#3a3428" : "#241f18";
+    g.beginPath(); g.moveTo(x, top); g.lineTo(x, top + bh); g.stroke();
+  }
+  const minN = 36, maxN = 88;
+  p.events.forEach(ev => {
+    if (ev.track === "drums") return;
+    const notes = ev.notes || [ev.midi];
+    const col = TRACKS.find(t => t.id === ev.track).color;
+    notes.forEach(n => {
+      const x = left + (ev.beat / beats) * (w - left - 8);
+      const ww = Math.max(3, (ev.dur / beats) * (w - left - 8) - 2);
+      const y = top + (1 - (n - minN) / (maxN - minN)) * bh;
+      g.fillStyle = col;
+      g.globalAlpha = ev.track === "pad" ? 0.35 : 0.9;
+      g.fillRect(x, y, ww, ev.track === "melody" ? 5 : 8);
+    });
+  });
+  g.globalAlpha = 1;
+  if (playBeat >= 0) {
+    const x = left + ((playBeat % beats) / beats) * (w - left - 8);
+    g.strokeStyle = "#e8a15a";
+    g.beginPath(); g.moveTo(x, top); g.lineTo(x, top + bh); g.stroke();
+  }
+}
+function draw() {
+  if (!state.playing) return;
+  const beatDur = 60 / state.piece.bpm;
+  const beats = (state.ctx.currentTime - state.origin) / beatDur;
+  drawRoll(beats);
+  const bar = currentBar();
+  document.querySelectorAll("#romans span").forEach(el => el.classList.toggle("now", +el.dataset.bar === bar));
+  if (bar >= 0) {
+    const ch = state.piece.chords[bar];
+    $("chordNow").innerHTML = `<b>${ch.name}</b> · ${ch.roman}`;
+  }
+  const sc = $("scope");
+  const dpr = window.devicePixelRatio || 1;
+  const w = sc.clientWidth || 900, h = 64;
+  sc.width = w * dpr; sc.height = h * dpr;
+  const g = sc.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  if (state.analyser) {
+    const buf = new Uint8Array(state.analyser.fftSize);
+    state.analyser.getByteTimeDomainData(buf);
+    g.beginPath();
+    g.strokeStyle = "#79c7bc";
+    for (let i = 0; i < buf.length; i += 4) {
+      const x = (i / buf.length) * w;
+      const y = (buf[i] / 255) * h;
+      i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  state.raf = requestAnimationFrame(draw);
+}
+
+function encodeWav(audioBuffer) {
+  const chs = audioBuffer.numberOfChannels;
+  const len = audioBuffer.length;
+  const sr = audioBuffer.sampleRate;
+  const buf = new ArrayBuffer(44 + len * chs * 2);
+  const v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, "RIFF"); v.setUint32(4, 36 + len * chs * 2, true); str(8, "WAVE");
+  str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, chs, true); v.setUint32(24, sr, true);
+  v.setUint32(28, sr * chs * 2, true); v.setUint16(32, chs * 2, true); v.setUint16(34, 16, true);
+  str(36, "data"); v.setUint32(40, len * chs * 2, true);
+  let off = 44;
+  const data = [];
+  for (let c = 0; c < chs; c++) data.push(audioBuffer.getChannelData(c));
+  for (let i = 0; i < len; i++) {
+    for (let c = 0; c < chs; c++) {
+      const s = Math.max(-1, Math.min(1, data[c][i]));
+      v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+      off += 2;
+    }
+  }
+  return new Blob([buf], { type: "audio/wav" });
+}
+async function downloadWav() {
+  if (!state.piece) compose(false);
+  $("status").textContent = "Rendering WAV…";
+  const p = state.piece;
+  const beatDur = 60 / p.bpm;
+  const seconds = p.bars * 4 * beatDur + 2.4;
+  const ctx = new OfflineAudioContext(2, Math.ceil(44100 * seconds), 44100);
+  const graph = buildGraph(ctx);
+  const old = state.nodes;
+  state.nodes = [];
+  p.events.forEach(ev => playEvent(ctx, graph.master, 0.05 + swingBeat(ev.beat, p.swing) * beatDur, ev, p.genre));
+  state.nodes = old;
+  const rendered = await ctx.startRendering();
+  const blob = encodeWav(rendered);
+  saveBlob(blob, `${slug(p.title)}.wav`);
+  $("status").textContent = "WAV saved";
+}
+function vlq(n) {
+  const out = [];
+  let v = n;
+  out.push(v & 0x7f); v >>= 7;
+  while (v) { out.push((v & 0x7f) | 0x80); v >>= 7; }
+  return out.reverse();
+}
+function downloadMidi() {
+  if (!state.piece) compose(false);
+  const p = state.piece;
+  const tpq = 480;
+  const tracks = { drums: [], bass: [], chords: [], melody: [], pad: [] };
+  p.events.forEach(ev => {
+    const start = Math.round(swingBeat(ev.beat, p.swing) * tpq);
+    const dur = Math.max(40, Math.round(ev.dur * tpq));
+    const notes = ev.drum ? [ev.midi] : (ev.notes || [ev.midi]);
+    const vel = Math.round((ev.vel || 0.6) * 100);
+    notes.forEach(n => tracks[ev.track].push({ t: start, on: true, n, vel }, { t: start + dur, on: false, n, vel: 0 }));
+  });
+  const programs = { drums: 0, bass: 33, chords: 4, melody: 81, pad: 89 };
+  const channels = { drums: 9, bass: 1, chords: 2, melody: 3, pad: 4 };
+  const parts = Object.keys(tracks).map(name => {
+    const evs = tracks[name].sort((a, b) => a.t - b.t || (a.on ? -1 : 1));
+    const bytes = [0x00, 0xC0 | channels[name], programs[name]];
+    let last = 0;
+    evs.forEach(e => {
+      vlq(e.t - last).forEach(b => bytes.push(b));
+      last = e.t;
+      bytes.push((e.on ? 0x90 : 0x80) | channels[name], e.n, e.on ? e.vel : 0);
+    });
+    vlq(0).forEach(b => bytes.push(b));
+    bytes.push(0xFF, 0x2F, 0x00);
+    return bytes;
+  });
+  const header = [0x4d,0x54,0x68,0x64, 0,0,0,6, 0,1, 0, parts.length, 0x01, 0xE0];
+  const body = [];
+  parts.forEach(part => {
+    body.push(0x4d,0x54,0x72,0x6b);
+    const len = part.length;
+    body.push((len >> 24) & 255, (len >> 16) & 255, (len >> 8) & 255, len & 255);
+    part.forEach(b => body.push(b));
+  });
+  saveBlob(new Blob([new Uint8Array(header.concat(body))], { type: "audio/midi" }), `${slug(state.piece.title)}.mid`);
+  $("status").textContent = "MIDI saved";
+}
+function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-"); }
+function saveBlob(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+}
+function writeHash() {
+  const o = settings();
+  const q = new URLSearchParams({ seed: $("seed").value, genre: o.genre, key: o.key, scale: o.scale, bpm: o.bpm, bars: o.bars, density: o.density, swing: o.swing });
+  history.replaceState(null, "", "#" + q.toString());
+}
+function readHash() {
+  if (!location.hash) return;
+  const q = new URLSearchParams(location.hash.slice(1));
+  if (q.get("genre") && GENRES[q.get("genre")]) state.genre = q.get("genre");
+  if (q.get("seed")) $("seed").value = q.get("seed");
+  ["key","scale","bpm","bars","density","swing"].forEach(k => { if (q.get(k)) $(k).value = q.get(k); });
+}
+
+function applyGenre(id, fromUser) {
+  state.genre = id;
+  const g = GENRES[id];
+  if (fromUser) {
+    $("scale").value = g.scale;
+    $("bpm").value = g.bpm;
+    $("swing").value = g.swing;
+    $("density").value = g.density;
+  }
+  document.querySelectorAll("#genres button").forEach(b => b.classList.toggle("on", b.dataset.id === id));
+  syncLabels();
+}
+function syncLabels() {
+  $("bpmVal").textContent = $("bpm").value;
+  $("barsVal").textContent = $("bars").value;
+  $("densityVal").textContent = $("density").value + "%";
+  $("swingVal").textContent = $("swing").value + "%";
+}
+state.mix = { drums: 0.8, bass: 0.75, chords: 0.7, melody: 0.8, pad: 0.55 };
+
+function init() {
+  $("genres").innerHTML = Object.entries(GENRES).map(([id, g]) => `<button data-id="${id}">${g.label}</button>`).join("");
+  $("genres").onclick = (e) => {
+    const id = e.target.dataset.id;
+    if (!id) return;
+    applyGenre(id, true);
+    compose(!state.locked);
+  };
+  $("key").innerHTML = NOTES.map(n => `<option>${n}</option>`).join("");
+  $("scale").innerHTML = Object.keys(SCALES).map(s => `<option value="${s}">${s}</option>`).join("");
+  $("mix").innerHTML = TRACKS.map(t => `<label>${t.label}<input data-mix="${t.id}" type="range" min="0" max="100" value="${Math.round(state.mix[t.id]*100)}"></label>`).join("");
+  $("mix").oninput = (e) => {
+    if (e.target.dataset.mix) state.mix[e.target.dataset.mix] = e.target.value / 100;
+  };
+  ["bpm","bars","density","swing"].forEach(id => $(id).oninput = syncLabels);
+  ["key","scale","bpm","bars","density","swing"].forEach(id => $(id).onchange = () => compose(false));
+  $("seed").onchange = () => compose(false);
+  $("lock").onclick = () => {
+    state.locked = !state.locked;
+    $("lock").textContent = state.locked ? "Locked" : "Lock";
+    $("lock").classList.toggle("primary", state.locked);
+  };
+  $("regen").onclick = () => { if (state.playing) stopAudio(); compose(true); };
+  $("surprise").onclick = () => {
+    state.genre = pick(Math.random, Object.keys(GENRES));
+    applyGenre(state.genre, true);
+    $("key").value = pick(Math.random, NOTES);
+    if (!state.locked) $("seed").value = randSeed();
+    if (state.playing) stopAudio();
+    compose(false);
+  };
+  $("play").onclick = play;
+  $("stop").onclick = stopAudio;
+  $("loop").onclick = () => {
+    state.looping = !state.looping;
+    $("loop").textContent = state.looping ? "Loop on" : "Loop off";
+  };
+  $("wav").onclick = downloadWav;
+  $("midi").onclick = downloadMidi;
+  $("share").onclick = async () => {
+    writeHash();
+    await navigator.clipboard.writeText(location.href);
+    $("status").textContent = "Link copied";
+  };
+  document.addEventListener("keydown", (e) => {
+    if (e.target.matches("input, select")) return;
+    if (e.code === "Space") { e.preventDefault(); play(); }
+    if (e.key === "g") { if (state.playing) stopAudio(); compose(true); }
+  });
+  readHash();
+  applyGenre(state.genre, !location.hash);
+  if (!$("seed").value) $("seed").value = randSeed();
+  syncLabels();
+  compose(false);
+}
+init();
+</script>
+</body>
+</html>
