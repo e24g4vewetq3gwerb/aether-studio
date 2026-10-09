@@ -442,11 +442,9 @@ function attachLyrics(rng, piece) {
   const lines = [];
   for (let bar = 0; bar < piece.bars; bar += 2) {
     const notes = melody.filter(e => e.beat >= bar * 4 && e.beat < (bar + 2) * 4);
-    let line = composeLine(rng, piece.genre);
-    let syls = line.split(/\s+/).flatMap(splitWord);
-    let guard = 0;
-    while (syls.length < notes.length && guard < 6) { line += " " + composeLine(rng, piece.genre); syls = line.split(/\s+/).flatMap(splitWord); guard++; }
-    notes.forEach((ev, i) => { ev.lyric = syls[i] || syls[syls.length - 1]; });
+    const line = composeLine(rng, piece.genre);
+    const syls = line.split(/\s+/).flatMap(splitWord);
+    notes.forEach((ev, i) => { ev.lyric = syls[Math.min(i, syls.length - 1)] || { text: "ah", vowel: "ah" }; });
     lines.push({ bar, text: line });
   }
   piece.lines = lines;
