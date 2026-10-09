@@ -103,7 +103,10 @@
   canvas { width: 100%; border-radius: 12px; background: #100f0c; display: block; border: 1px solid #2a261e; }
   #roll { height: 280px; }
   #scope { height: 64px; margin-top: 8px; }
-  .mix { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
+  .mix { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 12px; }
+  .lyrics { width: 100%; min-height: 92px; resize: vertical; background: #14130f; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; color: var(--ink); font: inherit; line-height: 1.45; }
+  .lyric-now { font-family: var(--serif); font-size: 20px; margin: 8px 0 10px; min-height: 28px; }
+  .lyric-now span.on { color: var(--amber2); }
   .mix label { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: .12em; display: grid; gap: 6px; }
   .transport {
     position: fixed; left: 0; right: 0; bottom: 0;
@@ -123,6 +126,7 @@
     .layout { grid-template-columns: 1fr; }
     .title { font-size: 26px; }
     .mix { grid-template-columns: repeat(3, 1fr); }
+    .lyric-now { font-size: 17px; }
     header { flex-direction: column; align-items: flex-start; }
   }
 </style>
@@ -134,7 +138,7 @@
       <div class="glyph">Æ</div>
       <div>
         <h1>Aether</h1>
-        <p class="sub">Generative music studio. Composed in your browser — nothing is uploaded.</p>
+        <p class="sub">Generative music studio with a singing voice. Composed in your browser — nothing is uploaded.</p>
       </div>
     </div>
     <div class="head-actions">
@@ -166,6 +170,16 @@
         <button id="lock" class="ghost" title="Lock seed">Lock</button>
       </div>
       <p class="sub" style="margin-top:10px">Same seed and settings always rebuild the same piece.</p>
+      <div class="label">Voice</div>
+      <div class="row">
+        <select id="voiceMode">
+          <option value="sung">Sung</option>
+          <option value="spoken">Spoken</option>
+          <option value="off">Off</option>
+        </select>
+        <button id="rewrite" class="ghost">Rewrite lyrics</button>
+      </div>
+      <p class="sub" style="margin-top:8px">Sung follows the melody. Spoken uses your browser voice. Edit the lines, then press Play.</p>
     </aside>
     <main class="panel">
       <div class="stage-top">
@@ -176,6 +190,8 @@
         <div class="now" id="chordNow">Ready</div>
       </div>
       <div class="romans" id="romans"></div>
+      <div class="lyric-now" id="lyricNow">—</div>
+      <textarea id="lyrics" class="lyrics" spellcheck="false" aria-label="Lyrics"></textarea>
       <canvas id="roll" width="900" height="280"></canvas>
       <canvas id="scope" width="900" height="64"></canvas>
       <div class="mix" id="mix"></div>
@@ -235,7 +251,8 @@ const TRACKS = [
   { id:"bass", label:"Bass", color:"#e0b15a" },
   { id:"chords", label:"Chords", color:"#79c7bc" },
   { id:"melody", label:"Melody", color:"#f3eee4" },
-  { id:"pad", label:"Pad", color:"#b7a0e0" }
+  { id:"pad", label:"Pad", color:"#b7a0e0" },
+  { id:"voice", label:"Voice", color:"#e08a78" }
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -345,7 +362,9 @@ function generate(seed, opts) {
     writeMelody(rng, events, opts, scale, root, ch, bar);
   }
   const title = ADJ[hashSeed(seed) % ADJ.length] + " " + NOUN[hashSeed(seed + "n") % NOUN.length];
-  return { seed, title, chords, events, bars, bpm: opts.bpm, key: opts.key, scale: opts.scale, genre: opts.genre, swing: opts.swing };
+  const piece = { seed, title, chords, events, bars, bpm: opts.bpm, key: opts.key, scale: opts.scale, genre: opts.genre, swing: opts.swing };
+  attachLyrics(rng, piece);
+  return piece;
 }
 function voice(rng, tones) {
   let pcs = tones.map(t => ((t % 12) + 12) % 12);
@@ -377,6 +396,61 @@ function writeMelody(rng, events, opts, scale, root, ch, bar) {
     const dur = opts.genre === "ambient" ? 1.5 : rng() < 0.25 ? 0.9 : 0.4;
     events.push({ beat: bar * 4 + step / 4, dur, midi, vel: 0.45 + rng() * 0.35, track: "melody" });
   });
+}
+
+
+const WORDS = {
+  ambient: { a:["quiet","silver","distant","slow","pale","soft"], n:["harbor","lantern","window","tide","river","room"], v:["waiting","drifting","breathing","holding","falling","listening"] },
+  lofi: { a:["late","dusty","warm","low","faded","small"], n:["tape","kitchen","city","record","corner","night"], v:["missing","calling","staying","thinking","keeping","leaving"] },
+  house: { a:["bright","open","golden","electric","wild","steady"], n:["floor","light","heartbeat","morning","signal","dance"], v:["moving","rising","holding","feeling","running","shining"] },
+  jazz: { a:["blue","smoky","velvet","late","easy","dim"], n:["room","piano","street","moon","glass","hour"], v:["waiting","singing","turning","staying","whispering","falling"] },
+  cinematic: { a:["wide","burning","silent","endless","brave","cold"], n:["horizon","empire","storm","ocean","fire","name"], v:["rising","standing","crossing","calling","breaking","remembering"] },
+  pop: { a:["bright","sweet","only","lucky","new","true"], n:["heart","summer","radio","smile","night","home"], v:["dancing","calling","wanting","loving","chasing","staying"] },
+  afro: { a:["golden","sunny","warm","open","high","sweet"], n:["rhythm","sun","street","drum","river","sky"], v:["moving","dancing","lifting","calling","shining","rolling"] },
+  classical: { a:["tender","quiet","gentle","pale","dear","still"], n:["garden","morning","willow","star","letter","field"], v:["walking","waiting","singing","turning","dreaming","returning"] }
+};
+const TEMPLATES = [
+  "I keep {v} the {n}",
+  "{a} {n} in the {n}",
+  "stay and {v} tonight",
+  "we are {v} the {n}",
+  "hold this {a} {n}",
+  "only the {n} remains",
+  "{a} light on the {n}",
+  "don't stop {v} me"
+];
+function vowelOf(syl) {
+  const s = syl.toLowerCase();
+  if (/ee|ea|ie|y$/.test(s)) return "ee";
+  if (/oo|ou|u/.test(s)) return "oo";
+  if (/o/.test(s)) return "oh";
+  if (/e/.test(s)) return "eh";
+  if (/ai|ay/.test(s)) return "ay";
+  return "ah";
+}
+function splitWord(word) {
+  const clean = word.toLowerCase().replace(/[^a-z']/g, "");
+  const parts = clean.match(/[^aeiou]*[aeiouy]+[^aeiou]*/g) || [clean || "ah"];
+  return parts.filter(Boolean).map(p => ({ text: p, vowel: vowelOf(p) }));
+}
+function composeLine(rng, genre) {
+  const bank = WORDS[genre] || WORDS.pop;
+  return pick(rng, TEMPLATES).replace(/\{(\w)\}/g, (_, k) => pick(rng, bank[k] || bank.n));
+}
+function attachLyrics(rng, piece) {
+  const melody = piece.events.filter(e => e.track === "melody").sort((a, b) => a.beat - b.beat);
+  const lines = [];
+  for (let bar = 0; bar < piece.bars; bar += 2) {
+    const notes = melody.filter(e => e.beat >= bar * 4 && e.beat < (bar + 2) * 4);
+    let line = composeLine(rng, piece.genre);
+    let syls = line.split(/\s+/).flatMap(splitWord);
+    let guard = 0;
+    while (syls.length < notes.length && guard < 6) { line += " " + composeLine(rng, piece.genre); syls = line.split(/\s+/).flatMap(splitWord); guard++; }
+    notes.forEach((ev, i) => { ev.lyric = syls[i] || syls[syls.length - 1]; });
+    lines.push({ bar, text: line });
+  }
+  piece.lines = lines;
+  piece.lyricText = lines.map(l => l.text).join("\n");
 }
 
 function swingBeat(beat, swing) {
@@ -420,6 +494,34 @@ function tone(ctx, dest, t, freq, type, dur, amp, cutoff) {
   o.start(t); o.stop(e.stop + 0.02);
   return o;
 }
+
+const FORMANTS = { ah:[730,1090,2440], eh:[530,1840,2480], ee:[270,2290,3010], oh:[570,840,2410], oo:[300,870,2240], ay:[660,1720,2410] };
+function sing(ctx, dest, t, freq, dur, amp, vowel) {
+  const o = ctx.createOscillator();
+  o.type = "sawtooth";
+  o.frequency.setValueAtTime(Math.max(80, freq), t);
+  const lfo = ctx.createOscillator();
+  const lfoG = ctx.createGain();
+  lfo.frequency.value = 5.1;
+  lfoG.gain.value = freq * 0.015;
+  lfo.connect(lfoG); lfoG.connect(o.frequency);
+  lfo.start(t); lfo.stop(t + dur + 0.25);
+  const e = env(ctx, t, amp, 0.04, 0.08, 0.72, Math.max(0.18, dur), 0.14);
+  const fqs = FORMANTS[vowel] || FORMANTS.ah;
+  fqs.forEach((fq, i) => {
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.setValueAtTime(fq, t);
+    bp.Q.value = i === 0 ? 5 : 7;
+    const g = ctx.createGain();
+    g.gain.value = [1, 0.55, 0.28][i];
+    o.connect(bp); bp.connect(g); g.connect(e.g);
+  });
+  e.g.connect(dest);
+  o.start(t); o.stop(e.stop + 0.02);
+  state.nodes.push(o, lfo);
+}
+
 function playEvent(ctx, dest, t, ev, genre) {
   const amp = (ev.vel || 0.5) * (state.mix[ev.track] ?? 0.7);
   if (amp < 0.01) return;
@@ -445,6 +547,10 @@ function playEvent(ctx, dest, t, ev, genre) {
       state.nodes.push(src);
     }
     return;
+  }
+  if (ev.track === "melody" && state.voiceMode === "sung" && ev.lyric) {
+    const vAmp = (ev.vel || 0.5) * (state.mix.voice ?? 0.8);
+    sing(ctx, dest, t, 440 * Math.pow(2, (ev.midi - 69) / 12), Math.max(ev.dur, 0.28), vAmp * 0.55, ev.lyric.vowel);
   }
   const notes = ev.notes || [ev.midi];
   const type = ev.track === "bass" ? "sawtooth" : ev.track === "pad" ? "triangle" : genre === "jazz" || genre === "classical" ? "triangle" : "sawtooth";
@@ -493,6 +599,7 @@ function stopAudio() {
   state.nodes.forEach(n => { try { n.stop(); } catch (e) {} });
   state.nodes = [];
   if (state.ctx) { try { state.ctx.close(); } catch (e) {} state.ctx = null; }
+  if (window.speechSynthesis) speechSynthesis.cancel();
   $("dot").classList.remove("on");
   $("status").textContent = "Stopped";
   $("play").textContent = "Play";
@@ -523,6 +630,13 @@ function scheduleLoop(index, dest) {
     const b = swingBeat(ev.beat, piece.swing);
     playEvent(state.ctx, dest, start + b * beatDur, ev, piece.genre);
   });
+  if (state.voiceMode === "spoken" && piece.lines) {
+    piece.lines.forEach(line => {
+      const when = (start + line.bar * 4 * beatDur - state.ctx.currentTime) * 1000;
+      const id = setTimeout(() => speakLine(line.text, piece.bpm), Math.max(0, when));
+      state.timers.push(id);
+    });
+  }
   if (state.looping) {
     const wait = (start + loopBeats * beatDur - state.ctx.currentTime - 0.6) * 1000;
     const id = setTimeout(() => scheduleLoop(index + 1, dest), Math.max(40, wait));
@@ -549,6 +663,7 @@ function compose(newSeed) {
   if (newSeed && !state.locked) $("seed").value = randSeed();
   const opts = settings();
   state.piece = generate($("seed").value || "aether", opts);
+  $("lyrics").dataset.dirty = "";
   renderPiece();
   writeHash();
   $("status").textContent = "Piece ready";
@@ -557,6 +672,8 @@ function renderPiece() {
   const p = state.piece;
   $("pieceTitle").textContent = p.title;
   $("pieceMeta").textContent = `${GENRES[p.genre].label} · ${p.key} ${p.scale} · ${p.bpm} bpm · ${p.bars} bars · seed ${p.seed}`;
+  if (!$("lyrics").dataset.dirty) $("lyrics").value = p.lyricText || "";
+  $("lyricNow").textContent = (p.lines && p.lines[0] && p.lines[0].text) || "";
   $("romans").innerHTML = p.chords.filter((c, i) => i < 8 || p.bars <= 8).map((c, i) => `<span data-bar="${c.bar}">${c.roman} ${c.name}</span>`).join("");
   drawRoll(0);
 }
@@ -618,6 +735,8 @@ function draw() {
   if (bar >= 0) {
     const ch = state.piece.chords[bar];
     $("chordNow").innerHTML = `<b>${ch.name}</b> · ${ch.roman}`;
+    const line = state.piece.lines && state.piece.lines.filter(l => l.bar <= bar).slice(-1)[0];
+    if (line) $("lyricNow").textContent = line.text;
   }
   const sc = $("scope");
   const dpr = window.devicePixelRatio || 1;
@@ -766,7 +885,8 @@ function syncLabels() {
   $("densityVal").textContent = $("density").value + "%";
   $("swingVal").textContent = $("swing").value + "%";
 }
-state.mix = { drums: 0.8, bass: 0.75, chords: 0.7, melody: 0.8, pad: 0.55 };
+state.mix = { drums: 0.8, bass: 0.75, chords: 0.7, melody: 0.55, pad: 0.5, voice: 0.85 };
+state.voiceMode = "sung";
 
 function init() {
   $("genres").innerHTML = Object.entries(GENRES).map(([id, g]) => `<button data-id="${id}">${g.label}</button>`).join("");
@@ -807,6 +927,35 @@ function init() {
   };
   $("wav").onclick = downloadWav;
   $("midi").onclick = downloadMidi;
+  $("voiceMode").onchange = () => { state.voiceMode = $("voiceMode").value; };
+  $("rewrite").onclick = () => {
+    if (!state.piece) return;
+    const rng = mulberry32(hashSeed(($("seed").value || "aether") + "|lyrics|" + Math.random()));
+    attachLyrics(rng, state.piece);
+    $("lyrics").dataset.dirty = "";
+    $("lyrics").value = state.piece.lyricText;
+    $("lyricNow").textContent = state.piece.lines[0] ? state.piece.lines[0].text : "";
+    $("status").textContent = "Lyrics rewritten";
+  };
+  $("lyrics").oninput = () => {
+    $("lyrics").dataset.dirty = "1";
+    if (!state.piece) return;
+    const lines = $("lyrics").value.split(/\n/).map(s => s.trim()).filter(Boolean);
+    const melody = state.piece.events.filter(e => e.track === "melody").sort((a, b) => a.beat - b.beat);
+    const chunks = [];
+    const per = Math.max(1, Math.ceil(melody.length / Math.max(1, lines.length)));
+    lines.forEach((line, i) => {
+      const syls = line.split(/\s+/).flatMap(splitWord);
+      chunks.push({ bar: i * 2, text: line, syls });
+    });
+    melody.forEach((ev, i) => {
+      const bucket = chunks[Math.min(chunks.length - 1, Math.floor(i / per))] || chunks[0];
+      if (!bucket) return;
+      ev.lyric = bucket.syls[i % bucket.syls.length];
+    });
+    state.piece.lines = chunks.map(c => ({ bar: c.bar, text: c.text }));
+    state.piece.lyricText = $("lyrics").value;
+  };
   $("share").onclick = async () => {
     writeHash();
     await navigator.clipboard.writeText(location.href);
