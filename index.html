@@ -167,7 +167,7 @@
       <input id="swing" type="range" min="0" max="60" value="0" />
       <div class="label">Seed</div>
       <div class="seedbox">
-        <input id="seed" type="text" spellcheck="false" placeholder="Seed, or leave blank" />
+        <input id="seed" type="text" spellcheck="false" placeholder="" value="" />
         <button id="lock" class="ghost" title="Lock seed">Lock</button>
         <button id="clear" class="ghost" title="Clear seed and piece">Clear</button>
       </div>
@@ -186,8 +186,8 @@
     <main class="panel">
       <div class="stage-top">
         <div>
-          <h2 class="title empty" id="pieceTitle">No piece yet</h2>
-          <div class="meta" id="pieceMeta">Press New piece to compose a track and lyrics.</div>
+          <h2 class="title empty" id="pieceTitle"></h2>
+          <div class="meta" id="pieceMeta"></div>
         </div>
         <div class="now" id="chordNow">Ready</div>
       </div>
@@ -666,10 +666,10 @@ function clearStudio() {
   $("seed").value = "";
   $("lock").textContent = "Lock";
   $("lock").classList.remove("primary");
-  $("pieceTitle").textContent = "No piece yet";
+  $("pieceTitle").textContent = "";
   $("pieceTitle").classList.add("empty");
-  $("pieceMeta").textContent = "Press New piece to compose a track and lyrics.";
-  $("chordNow").textContent = "Ready";
+  $("pieceMeta").textContent = "";
+  $("chordNow").textContent = "";
   $("romans").innerHTML = "";
   $("lyrics").value = "";
   $("lyrics").dataset.dirty = "";
@@ -883,7 +883,6 @@ function readHash() {
   if (!location.hash) return;
   const q = new URLSearchParams(location.hash.slice(1));
   if (q.get("genre") && GENRES[q.get("genre")]) state.genre = q.get("genre");
-  if (q.get("seed")) $("seed").value = q.get("seed");
   ["key","scale","bpm","bars","density","swing"].forEach(k => { if (q.get(k)) $(k).value = q.get(k); });
 }
 
