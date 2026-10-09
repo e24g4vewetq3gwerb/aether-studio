@@ -166,8 +166,9 @@
       <input id="swing" type="range" min="0" max="60" value="0" />
       <div class="label">Seed</div>
       <div class="seedbox">
-        <input id="seed" type="text" spellcheck="false" />
+        <input id="seed" type="text" spellcheck="false" placeholder="Empty" />
         <button id="lock" class="ghost" title="Lock seed">Lock</button>
+        <button id="clear" class="ghost" title="Clear seed and piece">Clear</button>
       </div>
       <p class="sub" style="margin-top:10px">Same seed and settings always rebuild the same piece.</p>
       <div class="label">Voice</div>
@@ -244,8 +245,8 @@ const DRUMS = {
   afro:{ kick:[1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,0], snare:[0,0,0,0,1,0,0,1,0,0,1,0,0,0,1,0], hat:[1,1,0,1,1,0,1,1,0,1,1,0,1,1,0,1] },
   none:{ kick:[], snare:[], hat:[] }
 };
-const ADJ = ["Amber","Quiet","Low","Silver","Velvet","Night","Warm","Glass","Slow","Copper","Distant","Soft","Paper","Golden","Still"];
-const NOUN = ["Lantern","Current","Harbor","Window","Ember","Garden","Signal","Tide","Room","Horizon","Tape","Orbit","Attic","River","Field"];
+const ADJ = ["Amber","Quiet","Low","Silver","Velvet","Night","Warm","Slow","Copper","Distant","Soft","Paper","Golden","Still"];
+const NOUN = ["Lantern","Harbor","Window","Ember","Garden","Signal","Tide","Room","Horizon","Tape","Orbit","Attic","River","Field"];
 const TRACKS = [
   { id:"drums", label:"Drums", color:"#e08a78" },
   { id:"bass", label:"Bass", color:"#e0b15a" },
@@ -657,6 +658,24 @@ function settings() {
     swing: +$("swing").value
   };
 }
+function clearStudio() {
+  if (state.playing) stopAudio();
+  state.piece = null;
+  state.locked = false;
+  $("seed").value = "";
+  $("lock").textContent = "Lock";
+  $("lock").classList.remove("primary");
+  $("pieceTitle").textContent = "Untitled";
+  $("pieceMeta").textContent = "Seed cleared";
+  $("chordNow").textContent = "Ready";
+  $("romans").innerHTML = "";
+  $("lyrics").value = "";
+  $("lyrics").dataset.dirty = "";
+  $("lyricNow").textContent = "—";
+  history.replaceState(null, "", location.pathname);
+  drawRoll(0);
+  $("status").textContent = "Cleared";
+}
 function compose(newSeed) {
   if (newSeed && !state.locked) $("seed").value = randSeed();
   const opts = settings();
@@ -908,6 +927,7 @@ function init() {
     $("lock").textContent = state.locked ? "Locked" : "Lock";
     $("lock").classList.toggle("primary", state.locked);
   };
+  $("clear").onclick = clearStudio;
   $("regen").onclick = () => { if (state.playing) stopAudio(); compose(true); };
   $("surprise").onclick = () => {
     state.genre = pick(Math.random, Object.keys(GENRES));
@@ -966,9 +986,8 @@ function init() {
   });
   readHash();
   applyGenre(state.genre, !location.hash);
-  if (!$("seed").value) $("seed").value = randSeed();
   syncLabels();
-  compose(false);
+  clearStudio();
 }
 init();
 </script>
